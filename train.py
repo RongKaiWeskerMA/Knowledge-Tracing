@@ -191,7 +191,7 @@ class XES3G5MDataModule(pl.LightningDataModule):
             shuffle=True,
             collate_fn=self._collate_fn,
             pin_memory=True,
-            num_workers=4,
+            num_workers=8,
         )
 
     def val_dataloader(self):
@@ -204,7 +204,7 @@ class XES3G5MDataModule(pl.LightningDataModule):
             shuffle=False,
             collate_fn=self._collate_fn,
             pin_memory=True,
-            num_workers=4,
+            num_workers=8,
         )
 
     def test_dataloader(self):
@@ -217,7 +217,7 @@ class XES3G5MDataModule(pl.LightningDataModule):
             shuffle=False,
             collate_fn=self._collate_fn,
             pin_memory=True,
-            num_workers=4,
+            num_workers=8,
         )
 
 
@@ -232,7 +232,7 @@ def parse_args():
     parser.add_argument("--dropout", type=float, default=0.2, help="Dropout rate")
     
     # Training parameters
-    parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay")
     parser.add_argument("--max_epochs", type=int, default=50, help="Maximum number of epochs")
@@ -250,7 +250,7 @@ def parse_args():
     parser.add_argument("--precision", type=str, default="32-true", 
                         choices=["32-true", "16-mixed", "bf16-mixed"], 
                         help="Precision for training (16-mixed or bf16-mixed recommended for GPU)")
-    parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for data loading")
+    parser.add_argument("--num_workers", type=int, default=1, help="Number of workers for data loading")
     
     return parser.parse_args()
 
@@ -302,6 +302,7 @@ def main():
         model_config = DKTConfig()
         model_config.hidden_dim = args.hidden_dim
         model_config.num_layers = args.num_layers
+        model_config.seq_length = args.max_seq_length
         model_config.dropout = args.dropout
         model_config.learning_rate = args.learning_rate
         model_config.weight_decay = args.weight_decay

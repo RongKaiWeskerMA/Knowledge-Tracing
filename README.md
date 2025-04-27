@@ -143,6 +143,10 @@ If you encounter CUDA memory issues:
 - **Mixed precision training**: For faster training and reduced memory usage
 - **Robust error handling**: To prevent training failures
 
+
+## To Do
+The implementation of the self-attention knowledge tracing has been completed yet.  
+
 ## References
 
 1. [Deep Knowledge Tracing](https://stanford.edu/~cpiech/bio/papers/deepKnowledgeTracing.pdf)
