@@ -668,7 +668,7 @@ class SAKT(pl.LightningModule):
         Returns:
             dict: Optimizer and scheduler configuration
         """
-        optimizer = Adam(
+        optimizer = AdamW(
             self.parameters(),
             lr=self.learning_rate,
             weight_decay=self.weight_decay
