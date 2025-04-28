@@ -263,13 +263,16 @@ class DKT(pl.LightningModule):
         questions = batch['questions']
         responses = batch['responses']
         selectmasks = batch['selectmasks']
-        
+        questions_embeddings = batch['question_embeddings']
         # Skip batches with too short sequences
         if questions.size(1) <= 1:
             return
             
         # Get model predictions
-        pred = self(questions, responses, selectmasks)
+        if self.use_pretrained_embeddings:
+            pred = self(questions_embeddings, responses, selectmasks)
+        else:
+            pred = self(questions, responses, selectmasks)
         
         # Calculate targets for all questions after the first step
         target_questions = questions[:, 1:]
