@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import lightning.pytorch as pl
-from torch.optim import Adam
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import roc_auc_score, accuracy_score
 from torch.nn.functional import one_hot
@@ -332,7 +332,7 @@ class DKT(pl.LightningModule):
         Returns:
             dict: Optimizer and scheduler configuration
         """
-        optimizer = Adam(
+        optimizer = AdamW(
             self.parameters(),
             lr=self.learning_rate,
             weight_decay=self.weight_decay
