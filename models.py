@@ -50,10 +50,10 @@ class DKT(pl.LightningModule):
         # For each question, we create two embeddings: one for correct and one for incorrect
         self.question_map = nn.Linear(2, self.hidden_dim)
 
-        self.response_embedding = nn.Embedding(
-            num_embeddings=2,
-            embedding_dim=self.hidden_dim
-        )   
+        # self.response_embedding = nn.Embedding(
+        #     num_embeddings=2,
+        #     embedding_dim=self.hidden_dim
+        # )   
         
         # LSTM layer
         self.lstm = nn.LSTM(
@@ -82,17 +82,21 @@ class DKT(pl.LightningModule):
         Returns:
             pred: Tensor of logits [batch_size, seq_len, num_questions]
         """
-        batch_size, seq_len, embedding_dim = questions.size()
         
+           
+        
+
         if self.use_pretrained_embeddings:
+            batch_size, seq_len, embedding_dim = questions.size()
             correct_one_hot = one_hot(responses, num_classes=2).float()
-            response_encoded = torch.matmul(correct_one_hot, self.response_embedding.weight)
+            response_encoded = self.question_map(correct_one_hot)
             question_with_correctness = questions + response_encoded
             embedded = question_with_correctness[:, :-1, :]
 
         else:
             # Create input embeddings based on question + correctness
             # question_ids * 2 is for incorrect, question_ids * 2 + 1 is for correct
+            batch_size, seq_len = questions.size()
             question_with_correctness = questions * 2 + responses
         
             # For the input sequence, we use all except the last item

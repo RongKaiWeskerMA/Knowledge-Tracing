@@ -225,12 +225,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train Knowledge Tracing models")
     
     # Model parameters
-    parser.add_argument("--model_type", type=str, choices=["dkt", "sakt"], default="sakt", help="Model type")
+    parser.add_argument("--model_type", type=str, choices=["dkt", "sakt"], default="dkt", help="Model type")
     parser.add_argument("--hidden_dim", type=int, default=768, help="Hidden dimension size")
     parser.add_argument("--num_layers", type=int, default=1, help="Number of LSTM layers (for DKT)")
     parser.add_argument("--num_heads", type=int, default=8, help="Number of attention heads (for SAKT)")
     parser.add_argument("--dropout", type=float, default=0.2, help="Dropout rate")
-    parser.add_argument("--use_pretrained_embeddings", type=bool, default=False, help="Use pretrained embeddings")
+    parser.add_argument("--use_pretrained_embeddings", type=bool, default=True, help="Use pretrained embeddings")
     # Training parameters
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate")
