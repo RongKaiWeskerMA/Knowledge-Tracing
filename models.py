@@ -5,7 +5,7 @@ import lightning.pytorch as pl
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import roc_auc_score, accuracy_score
-
+from torch.nn.functional import one_hot
 
 class DKTConfig:
     """Configuration for the DKT model."""
@@ -15,7 +15,7 @@ class DKTConfig:
     dropout: float = 0.2
     learning_rate: float = 1e-3
     weight_decay: float = 1e-5
-
+    use_pretrained_embeddings: bool = False
 
 class DKT(pl.LightningModule):
     """Deep Knowledge Tracing model implementation."""
@@ -44,13 +44,16 @@ class DKT(pl.LightningModule):
         self.dropout = config.dropout
         self.learning_rate = config.learning_rate
         self.weight_decay = config.weight_decay
-        
+        self.use_pretrained_embeddings = config.use_pretrained_embeddings
+
         # Input embedding layer (question_id * 2 + correctness)
         # For each question, we create two embeddings: one for correct and one for incorrect
-        self.question_embedding = nn.Embedding(
-            num_embeddings=num_questions * 2,
+        self.question_map = nn.Linear(2, self.hidden_dim)
+
+        self.response_embedding = nn.Embedding(
+            num_embeddings=2,
             embedding_dim=self.hidden_dim
-        )
+        )   
         
         # LSTM layer
         self.lstm = nn.LSTM(
@@ -79,23 +82,27 @@ class DKT(pl.LightningModule):
         Returns:
             pred: Tensor of logits [batch_size, seq_len, num_questions]
         """
-        batch_size, seq_len = questions.size()
+        batch_size, seq_len, embedding_dim = questions.size()
         
-        # Create input embeddings based on question + correctness
-        # question_ids * 2 is for incorrect, question_ids * 2 + 1 is for correct
-        question_with_correctness = questions * 2 + responses
+        if self.use_pretrained_embeddings:
+            correct_one_hot = one_hot(responses, num_classes=2).float()
+            response_encoded = torch.matmul(correct_one_hot, self.response_embedding.weight)
+            question_with_correctness = questions + response_encoded
+            embedded = question_with_correctness[:, :-1, :]
+
+        else:
+            # Create input embeddings based on question + correctness
+            # question_ids * 2 is for incorrect, question_ids * 2 + 1 is for correct
+            question_with_correctness = questions * 2 + responses
         
-        # For the input sequence, we use all except the last item
-        inp = question_with_correctness[:, :-1]
-        
-        # Handle edge cases where sequence length is 1
-        if inp.size(1) == 0:
-            # Return zero predictions if input is empty
-            return torch.zeros(batch_size, 0, self.num_questions, device=questions.device)
+            # For the input sequence, we use all except the last item
+            inp = question_with_correctness[:, :-1, :]
+            embedded = self.question_embedding(inp)
+            # Handle edge cases where sequence length is 1
+            if inp.size(1) == 0:
+                # Return zero predictions if input is empty
+                return torch.zeros(batch_size, 0, self.num_questions, device=questions.device)
             
-        # Get the question embeddings
-        embedded = self.question_embedding(inp)
-        
         # Apply dropout
         embedded = self.dropout_layer(embedded)
         
@@ -122,16 +129,23 @@ class DKT(pl.LightningModule):
         Returns:
             loss: Training loss
         """
+         
         questions = batch['questions']
         responses = batch['responses']
         selectmasks = batch['selectmasks']
+        questions_embeddings = batch['question_embeddings']
+        
+      
         
         # Skip batches with too short sequences
         if questions.size(1) <= 1:
             return None
             
         # Get model predictions
-        pred = self(questions, responses, selectmasks)
+        if self.use_pretrained_embeddings:
+            pred = self(questions_embeddings, responses, selectmasks)
+        else:
+            pred = self(questions, responses, selectmasks)
         
         # Calculate targets for all questions after the first step
         target_questions = questions[:, 1:]
@@ -174,7 +188,9 @@ class DKT(pl.LightningModule):
             batch: Batch of data from the data loader
             batch_idx: Index of the batch
         """
+       
         questions = batch['questions']
+        questions_embeddings = batch['question_embeddings']
         responses = batch['responses']
         selectmasks = batch['selectmasks']
         
@@ -183,7 +199,10 @@ class DKT(pl.LightningModule):
             return
             
         # Get model predictions
-        pred = self(questions, responses, selectmasks)
+        if self.use_pretrained_embeddings:
+            pred = self(questions_embeddings, responses, selectmasks)
+        else:
+            pred = self(questions, responses, selectmasks)
         
         # Calculate targets for all questions after the first step
         target_questions = questions[:, 1:]

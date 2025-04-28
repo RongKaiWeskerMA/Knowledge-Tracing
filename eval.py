@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for evaluation")
     parser.add_argument("--val_fold", type=int, default=4, help="Validation fold")
     parser.add_argument("--max_seq_length", type=int, default=200, help="Maximum sequence length")
-    
+    parser.add_argument("--use_pretrained_embeddings", type=bool, default=True, help="Use pretrained embeddings")
     # Output parameters
     parser.add_argument("--output_dir", type=str, default="./evaluation", help="Output directory for evaluation results")
     parser.add_argument("--dataset_split", type=str, choices=["test", "val"], default="test", help="Dataset split to evaluate on")
@@ -56,9 +56,12 @@ def get_predictions(model, dataloader):
             questions = batch['questions']
             responses = batch['responses']
             selectmasks = batch['selectmasks']
-            
+            questions_embeddings = batch['question_embeddings']
             # Forward pass
-            pred = model(questions, responses, selectmasks)
+            if model.use_pretrained_embeddings: 
+                pred = model(questions_embeddings, responses, selectmasks)
+            else:
+                pred = model(questions, responses, selectmasks)
             
             # Get targets for all questions after the first step
             target_questions = questions[:, 1:]
@@ -316,7 +319,7 @@ def main():
         model_config = DKTConfig()
         model_config.hidden_dim = args.hidden_dim
         model_config.num_layers = args.num_layers
-        
+        model_config.use_pretrained_embeddings = args.use_pretrained_embeddings
         model = DKT(
             num_questions=num_questions,
             num_concepts=num_concepts,

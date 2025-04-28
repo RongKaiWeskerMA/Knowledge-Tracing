@@ -226,13 +226,13 @@ def parse_args():
     
     # Model parameters
     parser.add_argument("--model_type", type=str, choices=["dkt", "sakt"], default="dkt", help="Model type")
-    parser.add_argument("--hidden_dim", type=int, default=256, help="Hidden dimension size")
+    parser.add_argument("--hidden_dim", type=int, default=768, help="Hidden dimension size")
     parser.add_argument("--num_layers", type=int, default=1, help="Number of LSTM layers (for DKT)")
     parser.add_argument("--num_heads", type=int, default=8, help="Number of attention heads (for SAKT)")
     parser.add_argument("--dropout", type=float, default=0.2, help="Dropout rate")
-    
+    parser.add_argument("--use_pretrained_embeddings", type=bool, default=True, help="Use pretrained embeddings")
     # Training parameters
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay")
     parser.add_argument("--max_epochs", type=int, default=50, help="Maximum number of epochs")
@@ -250,7 +250,7 @@ def parse_args():
     parser.add_argument("--precision", type=str, default="32-true", 
                         choices=["32-true", "16-mixed", "bf16-mixed"], 
                         help="Precision for training (16-mixed or bf16-mixed recommended for GPU)")
-    parser.add_argument("--num_workers", type=int, default=1, help="Number of workers for data loading")
+    parser.add_argument("--num_workers", type=int, default=8, help="Number of workers for data loading")
     
     return parser.parse_args()
 
@@ -306,6 +306,7 @@ def main():
         model_config.dropout = args.dropout
         model_config.learning_rate = args.learning_rate
         model_config.weight_decay = args.weight_decay
+        model_config.use_pretrained_embeddings = args.use_pretrained_embeddings
         
         model = DKT(
             num_questions=num_questions,
