@@ -1,0 +1,5 @@
+Model: dkt
+Dataset: test
+AUC: 0.8473
+AUPR: 0.9477
+Accuracy: 0.8252

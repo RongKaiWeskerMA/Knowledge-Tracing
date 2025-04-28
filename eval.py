@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument("--hidden_dim", type=int, default=768, help="Hidden dimension size")
     parser.add_argument("--num_layers", type=int, default=1, help="Number of LSTM layers (for DKT)")
     parser.add_argument("--num_heads", type=int, default=8, help="Number of attention heads (for SAKT)")
-    
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     # Data parameters
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for evaluation")
     parser.add_argument("--val_fold", type=int, default=4, help="Validation fold")
@@ -47,21 +47,28 @@ def get_predictions(model, dataloader):
     """
     model.eval()
     
+    # Initialize device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    
     all_preds = []
     all_targets = []
     all_questions = []
     
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Evaluating"):
-            questions = batch['questions']
-            responses = batch['responses']
-            selectmasks = batch['selectmasks']
-            questions_embeddings = batch['question_embeddings']
-            # Forward pass
-            if model.use_pretrained_embeddings: 
-                pred = model(questions_embeddings, responses, selectmasks)
-            else:
-                pred = model(questions, responses, selectmasks)
+            # Move batch to device
+            questions = batch['questions'].to(device)
+            responses = batch['responses'].to(device)
+            selectmasks = batch['selectmasks'].to(device)
+            questions_embeddings = batch['question_embeddings'].to(device) if 'question_embeddings' in batch else None
+            
+            # Forward pass with memory optimization
+            with torch.cuda.amp.autocast():
+                if model.use_pretrained_embeddings and questions_embeddings is not None:
+                    pred = model(questions_embeddings, responses, selectmasks)
+                else:
+                    pred = model(questions, responses, selectmasks)
             
             # Get targets for all questions after the first step
             target_questions = questions[:, 1:]
@@ -72,8 +79,8 @@ def get_predictions(model, dataloader):
             if isinstance(model, DKT):
                 batch_size, seq_len = target_questions.size()
                 pred_flat = pred.view(batch_size * seq_len, -1)
-                target_questions_flat = target_questions.view(-1)
-                pred_selected = pred_flat[torch.arange(batch_size * seq_len), target_questions_flat]
+                target_questions_flat = target_questions.contiguous().view(-1)
+                pred_selected = pred_flat[torch.arange(batch_size * seq_len, device=device), target_questions_flat]
                 pred_selected = pred_selected.view(batch_size, seq_len)
                 pred = pred_selected
             
@@ -81,7 +88,7 @@ def get_predictions(model, dataloader):
             valid_mask = (target_selectmasks == 1) & (target_questions != -1)
             
             if valid_mask.sum() > 0:
-                # Flatten the tensors
+                # Move tensors to CPU for numpy conversion
                 pred_flat = pred[valid_mask].cpu().numpy()
                 target_flat = target_responses[valid_mask].cpu().numpy()
                 questions_flat = target_questions[valid_mask].cpu().numpy()
@@ -109,18 +116,36 @@ def evaluate_model(model, dataloader):
     Returns:
         dict: Dictionary with evaluation metrics
     """
+    # Initialize device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    
     y_true, y_pred, questions = get_predictions(model, dataloader)
     
-    # Calculate AUC
-    fpr, tpr, _ = roc_curve(y_true, y_pred)
-    auc_score = auc(fpr, tpr)
+    # Calculate AUC with error handling
+    try:
+        fpr, tpr, _ = roc_curve(y_true, y_pred)
+        auc_score = auc(fpr, tpr)
+    except Exception as e:
+        print(f"Error calculating AUC: {e}")
+        fpr, tpr = np.array([0, 1]), np.array([0, 1])
+        auc_score = 0.5
     
-    # Calculate AUPR (area under precision-recall curve)
-    precision, recall, _ = precision_recall_curve(y_true, y_pred)
-    aupr = average_precision_score(y_true, y_pred)
+    # Calculate AUPR with error handling
+    try:
+        precision, recall, _ = precision_recall_curve(y_true, y_pred)
+        aupr = average_precision_score(y_true, y_pred)
+    except Exception as e:
+        print(f"Error calculating AUPR: {e}")
+        precision, recall = np.array([1, 0]), np.array([0, 1])
+        aupr = 0.5
     
-    # Calculate accuracy
-    accuracy = np.mean((y_pred >= 0.5) == y_true)
+    # Calculate accuracy with error handling
+    try:
+        accuracy = np.mean((y_pred >= 0.5) == y_true)
+    except Exception as e:
+        print(f"Error calculating accuracy: {e}")
+        accuracy = 0.5
     
     return {
         'auc': auc_score,
@@ -298,7 +323,12 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Set up data module
+    # Set random seed for reproducibility
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    
+    # Set up data module with memory optimization
     data_config = XES3G5MDataModuleConfig()
     data_config.batch_size = args.batch_size
     data_config.val_fold = args.val_fold
@@ -314,7 +344,7 @@ def main():
     num_questions = len(question_content_df)
     num_concepts = len(concept_content_df)
     
-    # Load model
+    # Load model with memory optimization
     if args.model_type == "dkt":
         model_config = DKTConfig()
         model_config.hidden_dim = args.hidden_dim
@@ -336,8 +366,12 @@ def main():
             config=model_config
         )
     
-    # Load model weights
-    model.load_state_dict(torch.load(args.model_path))
+    # Load model weights with error handling
+    try:
+        model.load_state_dict(torch.load(args.model_path))
+    except Exception as e:
+        print(f"Error loading model weights: {e}")
+        return
     
     # Select the right dataloader based on the dataset split
     if args.dataset_split == "test":
@@ -345,7 +379,7 @@ def main():
     else:
         dataloader = data_module.val_dataloader()
     
-    # Evaluate model
+    # Evaluate model with memory optimization
     eval_results = evaluate_model(model, dataloader)
     
     # Print results

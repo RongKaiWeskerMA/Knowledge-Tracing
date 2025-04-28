@@ -449,7 +449,7 @@ class SAKT(pl.LightningModule):
         # Handle edge cases where sequence length is 1
         if seq_len <= 1:
             # Return empty tensor if sequence is too short
-            return torch.zeros(batch_size, 0, device=questions.device)
+            return torch.zeros(batch_size, 0, device=self.device)
             
         # Create exercise+response embedding for the input sequence
         # We use the previous interactions to predict the next one
@@ -465,7 +465,7 @@ class SAKT(pl.LightningModule):
         target_exercises = torch.clamp(target_exercises, 0, self.num_questions - 1)
         
         # Create positional encoding
-        positions = torch.arange(seq_len - 1, device=questions.device).unsqueeze(0).expand(batch_size, -1)
+        positions = torch.arange(seq_len - 1, device=self.device).unsqueeze(0).expand(batch_size, -1)
         
         # Embed inputs
         exercise_emb = self.exercise_embedding(exercise_with_response)
@@ -534,27 +534,13 @@ class SAKT(pl.LightningModule):
         target_responses = responses[:, 1:].float()
         target_selectmasks = selectmasks[:, 1:]
         
-        # Gather predictions for the target questions
-        batch_size, seq_len = target_questions.size()
-        # Ensure tensor is contiguous before reshaping
-        pred_flat = pred.contiguous().reshape(batch_size * seq_len, -1)
-        target_questions_flat = target_questions.contiguous().reshape(-1)
-        
-        # Handle out-of-bounds indices
-        valid_indices = (target_questions_flat >= 0) & (target_questions_flat < self.num_questions)
-        if not valid_indices.all():
-            target_questions_flat = torch.clamp(target_questions_flat, 0, self.num_questions - 1)
-            
-        pred_selected = pred_flat[torch.arange(batch_size * seq_len, device=pred.device), target_questions_flat]
-        pred_selected = pred_selected.reshape(batch_size, seq_len)
-        
         # Calculate binary cross entropy loss only on the valid positions
         valid_mask = (target_selectmasks == 1) & (target_questions != -1)
         
         if valid_mask.sum() > 0:
             try:
                 # Ensure tensors are the right shape and contiguous
-                valid_pred = pred_selected[valid_mask].contiguous()
+                valid_pred = pred[valid_mask].contiguous()
                 valid_target = target_responses[valid_mask].contiguous()
                 
                 loss = F.binary_cross_entropy_with_logits(valid_pred, valid_target)
@@ -591,35 +577,22 @@ class SAKT(pl.LightningModule):
         target_responses = responses[:, 1:].float()
         target_selectmasks = selectmasks[:, 1:]
         
-        # Gather predictions for the target questions
-        batch_size, seq_len = target_questions.size()
-        # Ensure tensor is contiguous before reshaping
-        pred_flat = pred.contiguous().reshape(batch_size * seq_len, -1)
-        target_questions_flat = target_questions.contiguous().reshape(-1)
-        
-        # Handle out-of-bounds indices
-        valid_indices = (target_questions_flat >= 0) & (target_questions_flat < self.num_questions)
-        if not valid_indices.all():
-            target_questions_flat = torch.clamp(target_questions_flat, 0, self.num_questions - 1)
-            
-        pred_selected = pred_flat[torch.arange(batch_size * seq_len, device=pred.device), target_questions_flat]
-        pred_selected = pred_selected.reshape(batch_size, seq_len)
-        
         # Calculate binary cross entropy loss only on the valid positions
         valid_mask = (target_selectmasks == 1) & (target_questions != -1)
         
         if valid_mask.sum() > 0:
-            loss = F.binary_cross_entropy_with_logits(
-                pred_selected[valid_mask],
-                target_responses[valid_mask]
-            )
-            
-            # Calculate AUC and accuracy - apply sigmoid for probability values
-            pred_probs = torch.sigmoid(pred_selected[valid_mask])
-            pred_np = pred_probs.detach().cpu().numpy()
-            target_np = target_responses[valid_mask].detach().cpu().numpy()
-            
             try:
+                # Ensure tensors are the right shape and contiguous
+                valid_pred = pred[valid_mask].contiguous()
+                valid_target = target_responses[valid_mask].contiguous()
+                
+                loss = F.binary_cross_entropy_with_logits(valid_pred, valid_target)
+                
+                # Calculate AUC and accuracy
+                pred_probs = torch.sigmoid(valid_pred)
+                pred_np = pred_probs.detach().cpu().numpy()
+                target_np = valid_target.detach().cpu().numpy()
+                
                 auc = roc_auc_score(target_np, pred_np)
                 acc = accuracy_score(target_np.round(), pred_np.round())
                 
@@ -656,35 +629,22 @@ class SAKT(pl.LightningModule):
         target_responses = responses[:, 1:].float()
         target_selectmasks = selectmasks[:, 1:]
         
-        # Gather predictions for the target questions
-        batch_size, seq_len = target_questions.size()
-        # Ensure tensor is contiguous before reshaping
-        pred_flat = pred.contiguous().reshape(batch_size * seq_len, -1)
-        target_questions_flat = target_questions.contiguous().reshape(-1)
-        
-        # Handle out-of-bounds indices
-        valid_indices = (target_questions_flat >= 0) & (target_questions_flat < self.num_questions)
-        if not valid_indices.all():
-            target_questions_flat = torch.clamp(target_questions_flat, 0, self.num_questions - 1)
-            
-        pred_selected = pred_flat[torch.arange(batch_size * seq_len, device=pred.device), target_questions_flat]
-        pred_selected = pred_selected.reshape(batch_size, seq_len)
-        
         # Calculate binary cross entropy loss only on the valid positions
         valid_mask = (target_selectmasks == 1) & (target_questions != -1)
         
         if valid_mask.sum() > 0:
-            loss = F.binary_cross_entropy_with_logits(
-                pred_selected[valid_mask],
-                target_responses[valid_mask]
-            )
-            
-            # Calculate AUC and accuracy - apply sigmoid for probability values
-            pred_probs = torch.sigmoid(pred_selected[valid_mask])
-            pred_np = pred_probs.detach().cpu().numpy()
-            target_np = target_responses[valid_mask].detach().cpu().numpy()
-            
             try:
+                # Ensure tensors are the right shape and contiguous
+                valid_pred = pred[valid_mask].contiguous()
+                valid_target = target_responses[valid_mask].contiguous()
+                
+                loss = F.binary_cross_entropy_with_logits(valid_pred, valid_target)
+                
+                # Calculate AUC and accuracy
+                pred_probs = torch.sigmoid(valid_pred)
+                pred_np = pred_probs.detach().cpu().numpy()
+                target_np = valid_target.detach().cpu().numpy()
+                
                 auc = roc_auc_score(target_np, pred_np)
                 acc = accuracy_score(target_np.round(), pred_np.round())
                 
